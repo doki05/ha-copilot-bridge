@@ -1,11 +1,12 @@
 name: "HA Copilot Bridge"
-version: "0.1.0"
+version: "0.1.1"
 slug: "ha_copilot_bridge"
 description: "Private OAuth/PKCE MCP bridge for the HA Copilot Workspace Agent"
 url: "https://github.com/doki05/ha-copilot-bridge"
 arch:
   - aarch64
 startup: application
+init: false
 boot: auto
 stage: experimental
 ingress: true
