@@ -3,6 +3,7 @@ set -euo pipefail
 
 SOCKET=/run/tailscale/tailscaled.sock
 STATE=/data/tailscaled.state
+TAILSCALED_LOG=/data/tailscaled.log
 AUTH_KEY="$(bashio::config 'tailscale_auth_key')"
 HOSTNAME="$(bashio::config 'tailscale_hostname')"
 
@@ -26,7 +27,7 @@ tailscaled \
   --state="${STATE}" \
   --socket="${SOCKET}" \
   --tun=userspace-networking \
-  >/dev/null 2>&1 &
+  >"${TAILSCALED_LOG}" 2>&1 &
 
 for _ in $(seq 1 30); do
   [[ -S "${SOCKET}" ]] && break
@@ -38,15 +39,25 @@ if [[ ! -S "${SOCKET}" ]]; then
   exit 1
 fi
 
-tailscale --socket="${SOCKET}" up \
+bashio::log.info "Authenticating the bridge with Tailscale."
+if ! tailscale --socket="${SOCKET}" up \
   --auth-key="${AUTH_KEY}" \
   --hostname="${HOSTNAME}" \
   --accept-dns=false \
-  --reset >/dev/null
+  --reset \
+  --timeout=60s; then
+  bashio::log.error "Tailscale authentication did not complete."
+  tail -n 50 "${TAILSCALED_LOG}" || true
+  exit 1
+fi
 
 # Funnel exposes only the MCP listener. The approval listener is a different,
 # unexposed port that is reachable only through Home Assistant ingress.
-tailscale --socket="${SOCKET}" funnel --bg 8090 >/dev/null
+if ! tailscale --socket="${SOCKET}" funnel --bg 8090; then
+  bashio::log.error "Tailscale Funnel could not be enabled."
+  tail -n 50 "${TAILSCALED_LOG}" || true
+  exit 1
+fi
 
 PUBLIC_NAME="$(tailscale --socket="${SOCKET}" status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')"
 bashio::log.info "MCP endpoint: https://${PUBLIC_NAME}/mcp"
