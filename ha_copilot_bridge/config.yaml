@@ -1,0 +1,29 @@
+name: "HA Copilot Bridge"
+version: "0.1.0"
+slug: "ha_copilot_bridge"
+description: "Private OAuth/PKCE MCP bridge for the HA Copilot Workspace Agent"
+url: "https://github.com/doki05/ha-copilot-bridge"
+arch:
+  - aarch64
+startup: application
+boot: auto
+stage: experimental
+ingress: true
+ingress_port: 8091
+ingress_stream: true
+panel_icon: mdi:robot-outline
+panel_title: HA Copilot Bridge
+panel_admin: true
+hassio_role: homeassistant
+homeassistant_api: true
+auth_api: true
+options:
+  tailscale_auth_key: ""
+  tailscale_hostname: "ha-copilot-bridge"
+  owner_password: ""
+  enable_service_execution: false
+schema:
+  tailscale_auth_key: password
+  tailscale_hostname: "match(^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]$)"
+  owner_password: "password"
+  enable_service_execution: bool

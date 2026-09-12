@@ -1,0 +1,4 @@
+__pycache__/
+*.py[cod]
+bridge_state.json
+tailscaled.state
