@@ -96,6 +96,11 @@ def base_url(handler: BaseHTTPRequestHandler) -> str:
     return f"{forwarded}://{host}".rstrip("/")
 
 
+def protected_resource_metadata_url(handler: BaseHTTPRequestHandler) -> str:
+    """Return the endpoint-specific RFC 9728 metadata URL for /mcp."""
+    return base_url(handler) + "/.well-known/oauth-protected-resource/mcp"
+
+
 def ha_request(path: str, method: str = "GET", body: Any | None = None) -> Any:
     token = os.environ.get("SUPERVISOR_TOKEN")
     if not token:
@@ -348,15 +353,22 @@ class Handler(BaseHTTPRequestHandler):
         return parsed.path, urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
 
     def require_token(self) -> bool:
+        challenge = {
+            "WWW-Authenticate": (
+                'Bearer resource_metadata="'
+                + protected_resource_metadata_url(self)
+                + '", scope="mcp:read"'
+            )
+        }
         header = self.headers.get("Authorization", "")
         if not header.startswith("Bearer "):
-            self.send_json({"error": "unauthorized"}, 401, {"WWW-Authenticate": f'Bearer resource_metadata="{base_url(self)}/.well-known/oauth-protected-resource"'})
+            self.send_json({"error": "unauthorized"}, 401, challenge)
             return False
         token = header[7:]
         with STATE.lock:
             valid = token in STATE.data["tokens"] and STATE.data["tokens"][token].get("expires_at", 0) > now()
         if not valid:
-            self.send_json({"error": "invalid_token"}, 401, {"WWW-Authenticate": f'Bearer resource_metadata="{base_url(self)}/.well-known/oauth-protected-resource"'})
+            self.send_json({"error": "invalid_token"}, 401, challenge)
             return False
         return True
 
@@ -378,13 +390,20 @@ class Handler(BaseHTTPRequestHandler):
                 "scopes_supported": ["mcp:read", "mcp:prepare", "mcp:apply"],
                 "authorization_response_iss_parameter_supported": True,
             })
-        elif path == "/.well-known/oauth-protected-resource":
+        elif path in ("/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"):
             self.send_json({
                 "resource": base + "/mcp",
                 "authorization_servers": [base],
                 "bearer_methods_supported": ["header"],
                 "scopes_supported": ["mcp:read", "mcp:prepare", "mcp:apply"],
             })
+        elif path == "/mcp":
+            # ChatGPT probes the configured MCP endpoint with GET before it
+            # starts the OAuth flow. A 401 OAuth challenge (not a 404) is
+            # therefore required for protected-resource discovery.
+            if not self.require_token():
+                return
+            self.send_json({"error": "method_not_allowed"}, 405)
         elif path == "/auth/authorize":
             content = render_authorize_form(query)
             self.send_response(200)

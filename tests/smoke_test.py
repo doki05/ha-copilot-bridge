@@ -48,6 +48,13 @@ def request(method, path, payload=None, headers=None):
 
 
 try:
+    status, headers, _ = request("GET", "/mcp")
+    assert status == 401 and "/.well-known/oauth-protected-resource/mcp" in headers["WWW-Authenticate"]
+
+    status, _, content = request("GET", "/.well-known/oauth-protected-resource/mcp")
+    resource_metadata = json.loads(content)
+    assert status == 200 and resource_metadata["resource"] == "https://bridge.test/mcp"
+
     status, _, content = request("GET", "/.well-known/oauth-authorization-server")
     metadata = json.loads(content)
     assert status == 200 and metadata["code_challenge_methods_supported"] == ["S256"]
